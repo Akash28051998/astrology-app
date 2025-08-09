@@ -1,0 +1,202 @@
+import React, { useState, useEffect } from "react";
+
+// Astrology App (UI + API structure) // - This single-file React component provides inputs for Name, DOB, Time, Place (with lat/lon) // - It calls a backend API endpoint (/api/calculate) which should perform accurate astrological calculations //   using a trusted engine (Swiss Ephemeris / swisseph) and return a JSON kundali/report. // - For now the frontend falls back to a deterministic mock when backend is not available. // - To enable accurate charts: implement backend (Node/Express) that uses swisseph or an astrology API, //   and expose POST /api/calculate which accepts: { name, dob, time, lat, lon, tzOffset }
+
+export default function AstrologyApp() { const [profiles, setProfiles] = useState(() => { try { return JSON.parse(localStorage.getItem("astro_profiles") || "[]"); } catch (e) { return []; } });
+
+const [form, setForm] = useState({ name: "Akash Singh", dob: "1998-05-28", time: "06:10", ampm: "AM", place: "Sultanpur, Uttar Pradesh, India", lat: "26.2611", lon: "82.1637", tzOffset: "+05:30", });
+
+const [selected, setSelected] = useState(null); const [report, setReport] = useState(null); const [loading, setLoading] = useState(false); const [error, setError] = useState(null);
+
+useEffect(() => { localStorage.setItem("astro_profiles", JSON.stringify(profiles)); }, [profiles]);
+
+function handleChange(e) { const { name, value } = e.target; setForm((s) => ({ ...s, [name]: value })); }
+
+function saveProfile() { if (!form.name || !form.dob || !form.time) { alert("Name, DOB and Time are required"); return; } const newProfile = { id: Date.now(), ...form }; setProfiles((p) => [newProfile, ...p]); setForm((s) => ({ ...s, name: "", dob: "", time: "", place: "", lat: "", lon: "" })); }
+
+function useMockCalculation(payload) { // deterministic mock generator (same as prototype) — used if backend unavailable const seed = (payload.name + payload.dob + payload.time).split("").reduce((s, c) => s + c.charCodeAt(0), 0); const planets = ["Sun","Moon","Mars","Mercury","Jupiter","Venus","Saturn","Rahu","Ketu"]; const signs = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"]; const resultPlanets = planets.map((p, i) => { const pos = Math.floor((seed * (i + 7)) % 360); const sign = signs[Math.floor(pos / 30)]; const degree = pos % 30; return { planet: p, sign, degree: ${degree}° }; }); const houses = Array.from({ length: 12 }, (_, i) => ({ house: i + 1, summary: House ${i+1} summary — focus on ${["self","wealth","siblings","home","creativity","health","relationships","shared","education","career","gains","spirituality"][i]} })); return { planets: resultPlanets, houses, dashas: [{ name: "Saturn", start: "2024-01-01", end: "2029-12-31", notes: "Discipline phase" }], generatedAt: new Date().toISOString() }; }
+
+async function calculateKundali(profile) { setLoading(true); setError(null); setSelected(profile); setReport(null);
+
+const payload = {
+  name: profile.name,
+  dob: profile.dob, // YYYY-MM-DD expected
+  time: profile.time, // HH:MM
+  ampm: profile.ampm,
+  place: profile.place,
+  lat: profile.lat,
+  lon: profile.lon,
+  tzOffset: profile.tzOffset,
+};
+
+try {
+  // Try calling backend API first. Backend must be implemented separately.
+  const resp = await fetch("/api/calculate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    // fallback to mock if backend not implemented or returned error
+    console.warn("Backend not available or returned error, using mock data.");
+    const mock = useMockCalculation(payload);
+    setReport(mock);
+  } else {
+    const data = await resp.json();
+    // Expected backend response shape: { planets: [...], houses: [...], dashas: [...], ascendant: {sign, degree}, generatedAt }
+    setReport(data);
+  }
+} catch (e) {
+  console.warn("Error calling backend:", e);
+  const mock = useMockCalculation(payload);
+  setReport(mock);
+} finally {
+  setLoading(false);
+}
+
+}
+
+function downloadJSON() { if (!report || !selected) return; const dataStr = data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ profile:selected, report }, null, 2))}; const a = document.createElement("a"); a.href = dataStr; a.download = ${(selected.name || 'profile')}_astro_report.json; a.click(); }
+
+function clearProfiles() { if (!confirm("Clear all saved profiles?")) return; setProfiles([]); setReport(null); setSelected(null); }
+
+return ( <div className="min-h-screen bg-gradient-to-br from-slate-900 to-gray-800 text-white p-6"> <div className="max-w-6xl mx-auto"> <header className="flex items-center justify-between mb-6"> <h1 className="text-2xl font-bold">Astrology App — Fill details & Generate Kundali</h1> <div className="text-sm text-slate-300">Frontend + API structure (backend required for accurate calculations)</div> </header>
+
+<main className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Left: Form */}
+      <section className="col-span-1 bg-white/5 rounded-2xl p-4">
+        <h2 className="font-semibold mb-3">Enter Details</h2>
+        <div className="space-y-3">
+          <input name="name" value={form.name} onChange={handleChange} placeholder="Name" className="w-full p-2 rounded bg-white/5" />
+
+          <div className="flex gap-2">
+            <input name="dob" value={form.dob} onChange={handleChange} placeholder="Date of Birth (YYYY-MM-DD)" className="w-1/2 p-2 rounded bg-white/5" />
+            <input name="time" value={form.time} onChange={handleChange} placeholder="Time (HH:MM)" className="w-1/4 p-2 rounded bg-white/5" />
+            <select name="ampm" value={form.ampm} onChange={handleChange} className="w-1/4 p-2 rounded bg-white/5">
+              <option>AM</option>
+              <option>PM</option>
+            </select>
+          </div>
+
+          <input name="place" value={form.place} onChange={handleChange} placeholder="Place (City, State, Country)" className="w-full p-2 rounded bg-white/5" />
+
+          <div className="flex gap-2">
+            <input name="lat" value={form.lat} onChange={handleChange} placeholder="Latitude" className="w-1/2 p-2 rounded bg-white/5" />
+            <input name="lon" value={form.lon} onChange={handleChange} placeholder="Longitude" className="w-1/2 p-2 rounded bg-white/5" />
+          </div>
+
+          <input name="tzOffset" value={form.tzOffset} onChange={handleChange} placeholder="Timezone Offset (e.g. +05:30)" className="w-full p-2 rounded bg-white/5" />
+
+          <div className="flex gap-2">
+            <button className="flex-1 bg-emerald-500 text-black rounded py-2 font-medium" onClick={() => saveProfile()}>Save Profile</button>
+            <button className="flex-1 bg-slate-600 rounded py-2" onClick={() => calculateKundali(form)}>Generate Kundali</button>
+          </div>
+
+          <div className="text-xs text-slate-400 mt-2">Tip: For precise kundali, implement backend using Swiss Ephemeris (swisseph) or a trusted astrology API that accepts UTC time and lat/lon.</div>
+        </div>
+
+        <div className="mt-6 border-t border-white/5 pt-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">Saved Profiles</h3>
+            <button className="text-xs text-red-400" onClick={clearProfiles}>Clear All</button>
+          </div>
+
+          <div className="mt-3 space-y-2 max-h-56 overflow-auto">
+            {profiles.length === 0 && <div className="text-sm text-slate-400">No profiles yet. Save a profile to generate later.</div>}
+            {profiles.map((p) => (
+              <div key={p.id} className="p-2 bg-white/3 rounded flex items-center justify-between">
+                <div>
+                  <div className="font-medium">{p.name || '—'}</div>
+                  <div className="text-xs text-slate-300">{p.dob} • {p.time} • {p.place}</div>
+                </div>
+                <div className="flex gap-2">
+                  <button className="text-xs bg-slate-700 px-2 py-1 rounded" onClick={() => calculateKundali(p)}>Generate</button>
+                  <button className="text-xs bg-slate-600 px-2 py-1 rounded" onClick={() => { navigator.clipboard && navigator.clipboard.writeText(JSON.stringify(p)); alert('Profile copied to clipboard') }}>Copy</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Middle + Right: Report */}
+      <section className="col-span-2 bg-white/5 rounded-2xl p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-semibold">Kundali Report</h2>
+          <div className="flex gap-2">
+            <button disabled={!report} onClick={downloadJSON} className={`text-sm px-3 py-1 rounded ${report? 'bg-emerald-500 text-black':'bg-slate-600 text-slate-400'}`}>Download JSON</button>
+          </div>
+        </div>
+
+        {error && <div className="text-red-300 mb-2">{error}</div>}
+        {!selected && <div className="text-slate-400">Fill details and click "Generate Kundali". Backend recommended for accurate chart.</div>}
+
+        {loading && <div className="text-slate-300">Calculating kundali…</div>}
+
+        {report && selected && (
+          <div className="space-y-4">
+            <div className="bg-white/3 rounded p-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-lg font-bold">{selected.name}</div>
+                  <div className="text-xs text-slate-300">{selected.dob} • {selected.time} {selected.ampm} • {selected.place}</div>
+                </div>
+                <div className="text-xs text-slate-300">Generated: {new Date(report.generatedAt).toLocaleString()}</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="bg-white/3 p-3 rounded">
+                <h4 className="font-medium mb-2">Planetary Positions</h4>
+                <div className="space-y-2 max-h-40 overflow-auto">
+                  {report.planets && report.planets.map((pl) => (
+                    <div key={pl.planet} className="flex justify-between text-sm">
+                      <div>{pl.planet}</div>
+                      <div className="text-slate-300">{pl.sign} • {pl.degree}</div>
+                    </div>
+                  ))}
+                  {!report.planets && <div className="text-xs text-slate-400">No planetary data returned.</div>}
+                </div>
+              </div>
+
+              <div className="bg-white/3 p-3 rounded">
+                <h4 className="font-medium mb-2">Dashas</h4>
+                <div className="space-y-2 text-sm">
+                  {report.dashas && report.dashas.map((d, idx) => (
+                    <div key={idx} className="border-b border-white/5 pb-2">
+                      <div className="font-medium">{d.name}</div>
+                      <div className="text-xs text-slate-300">{d.start} — {d.end}</div>
+                      <div className="text-xs mt-1">{d.notes}</div>
+                    </div>
+                  ))}
+                  {!report.dashas && <div className="text-xs text-slate-400">No dasha data returned.</div>}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/3 p-3 rounded">
+              <h4 className="font-medium mb-2">House Summaries</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {report.houses && report.houses.map((h) => (
+                  <div key={h.house} className="p-2 bg-white/5 rounded text-sm">
+                    <div className="font-medium">House {h.house}</div>
+                    <div className="text-xs text-slate-300 mt-1">{h.summary}</div>
+                  </div>
+                ))}
+                {!report.houses && <div className="text-xs text-slate-400">No house data returned.</div>}
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-400">Note: This frontend expects a backend POST /api/calculate that returns a validated kundali JSON. I can provide the backend code (Node.js + swisseph) next — बोलो तो मैं backend का code भी दे दूँ।</div>
+          </div>
+        )}
+      </section>
+    </main>
+
+    <footer className="mt-6 text-sm text-slate-400">Next steps: 1) Implement backend with swisseph for accurate planetary longitudes and ascendant. 2) Integrate geocoding (optional) to convert place → lat/lon. 3) Add SVG chart renderer and PDF export.</footer>
+  </div>
+</div>
+
+); }
+
